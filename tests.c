@@ -104,7 +104,7 @@ char base_mem[MSIZE];
 char queue_mem[MSIZE];
 char read_bufs[2][MSIZE];
 
-static bool test_ss_init(void)
+static bool test_init(void)
 {
     memset(base_mem, 0, MSIZE);
     struct imfs_conf c = {
@@ -350,9 +350,11 @@ static bool test_common_usage(void)
     
     for (size_t i = 0; i < NUMDIR; i++)
     {
-        char *p = stpcpy(comp_path, paths[i]);
-        *p++ = '/';
-        p = stpcpy(p, fnames[i]);
+        char *p = strcpy(comp_path, paths[i]);
+        p += strlen(paths[i]);
+        *p++ = '/';        
+        strcpy(p, fnames[i]);
+        p += strlen(fnames[i]);
         *p = '\0';
         
         int fd = imfs_open(ssd, comp_path, IMFS_CREAT | IMFS_RDWR);
@@ -392,9 +394,11 @@ static bool test_common_usage(void)
 
     for (size_t i = 0; i < NUMDIR; i++)
     {
-        char *p = stpcpy(comp_path, paths[i]);
+        char *p = strcpy(comp_path, paths[i]);
+        p += strlen(paths[i]);
         *p++ = '/';
-        p = stpcpy(p, fnames[i]);
+        strcpy(p, fnames[i]);
+        p += strlen(fnames[i]);
         *p = '\0';
 
         int fd = imfs_open(ssd2, comp_path, IMFS_CREAT | IMFS_RDWR | IMFS_APPEND);
@@ -444,10 +448,10 @@ static bool test_common_usage(void)
 
 int main(void)
 {
-    printf("==== SS Tests starting ====\n");
+    printf("==== IMFS Tests start ====\n");
     
-    printf("test_ss_init: %s\n",
-        test_ss_init() ? "Success" : "Failed");
+    printf("test_init: %s\n",
+        test_init() ? "Success" : "Failed");
     
     printf("test_file_openings: %s\n",
         test_file_openings() ? "Success" : "Failed");
@@ -464,7 +468,7 @@ int main(void)
     printf("test_one_M_random_read_write: %s\n",
         test_one_M_random_read_write() ? "Success" : "Failed");
     
-    printf("==== SS Tests end ====\n");
+    printf("==== IMFS Tests end ====\n");
 
     return 0;
 }

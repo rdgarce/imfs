@@ -62,7 +62,10 @@ struct imfs_conf {
 #define IMFS_RDWR     1
 /* Create the file if it does not exists */
 #define IMFS_CREAT    2
-/* Start writing at the end of the file */
+/* 
+ * Start writing at the end of the file.
+ * If not specified, the file is erased
+ */
 #define IMFS_APPEND   4
 
 /*

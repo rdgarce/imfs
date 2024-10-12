@@ -56,9 +56,6 @@ struct direlem {
  * The file data block size is calculated as the smallest
  * integer bigger that SS_PRE_ADJ_DATA_BLOCK_SIZE such that
  * it's a multiple of the size of struct direlem.
- * Then the alignment of struct direlem is added to this number
- * so that a file data block can be safely interpreted as an
- * array of DIRELEM_PER_FDB struct direlem elements
  */
 #define IMFS_DATA_BLOCK_SIZE                        \
     (sizeof(struct direlem) *                       \
@@ -72,6 +69,10 @@ struct fdatablock {
         /* xor is used while allocated to a fnode as next ^ prev */
         uintptr_t xor;
     } h;
+    /*
+     * data is aligned as struct direlem so that it can be casted to
+     * an array of such structs
+     */
     char _Alignas(struct direlem) data[IMFS_DATA_BLOCK_SIZE];
 };
 // We want to use the LSB of [h.next] to store allocation
