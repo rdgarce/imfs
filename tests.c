@@ -58,7 +58,7 @@ ssize_t queue_read(ByteQueue *queue, char *buffer, size_t len) {
     return len;
 }
 
-#define MAX_DIR_NAME_LENGTH SS_MAX_NAME_LEN
+#define MAX_DIR_NAME_LENGTH IMFS_MAX_NAME_LEN
 #define MAX_DEPTH 50
 #define MAX_PATH_LENGTH \
         ((MAX_DIR_NAME_LENGTH + 1) * MAX_DEPTH + 1)
@@ -107,16 +107,16 @@ char read_bufs[2][MSIZE];
 static bool test_ss_init(void)
 {
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = rand() % 100,
         .max_opened_files = rand() % 100,
         .mem_size = MSIZE
     };
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd) return false;
 
-    struct ss_desc *ssd1 = imfs_init(base_mem, &c, false);
+    struct imfs *ssd1 = imfs_init(base_mem, &c, false);
     if (ssd != ssd1) return false;
 
     if(imfs_init(base_mem, NULL, false) != ssd) return false;
@@ -128,16 +128,16 @@ static bool test_ss_init(void)
 static bool test_big_read_write(void)
 {
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = 1,
         .max_opened_files = 1,
         .mem_size = MSIZE
     };
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd) return false;
 
-    int fd = imfs_open(ssd, "/file", SS_CREAT | SS_RDWR | SS_APPEND);
+    int fd = imfs_open(ssd, "/file", IMFS_CREAT | IMFS_RDWR | IMFS_APPEND);
     if (fd < 0) return false;
 
     ByteQueue bq;
@@ -167,16 +167,16 @@ static bool test_big_read_write(void)
 static bool test_one_M_random_read_write(void)
 {
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = 1,
         .max_opened_files = 1,
         .mem_size = MSIZE
     };
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd) return false;
 
-    int fd = imfs_open(ssd, "/file", SS_CREAT | SS_RDWR | SS_APPEND);
+    int fd = imfs_open(ssd, "/file", IMFS_CREAT | IMFS_RDWR | IMFS_APPEND);
     if (fd < 0) return false;
 
     ByteQueue bq;
@@ -220,19 +220,19 @@ static bool test_file_openings(void)
 {
     #define NUMOPFLS 100
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = 1,
         .max_opened_files = NUMOPFLS,
         .mem_size = MSIZE
     };
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd) return false;
 
     int fds[NUMOPFLS];
 
     for (size_t i = 0; i < NUMOPFLS; i++)
-        fds[i] = imfs_open(ssd, "/file", SS_CREAT);
+        fds[i] = imfs_open(ssd, "/file", IMFS_CREAT);
     
     if (fds[NUMOPFLS-1] != NUMOPFLS)
     {
@@ -240,7 +240,7 @@ static bool test_file_openings(void)
         return false;
     }
     
-    if (imfs_open(ssd, "/file", SS_CREAT) != -1)
+    if (imfs_open(ssd, "/file", IMFS_CREAT) != -1)
     {
         printf("++ Expected no memory for file opening but file was opened\n");
         return false;
@@ -254,7 +254,7 @@ static bool test_file_openings(void)
         }
     
     int last;
-    if ((last = imfs_open(ssd, "/file", SS_CREAT)) != fds[0])
+    if ((last = imfs_open(ssd, "/file", IMFS_CREAT)) != fds[0])
     {
         printf("++ Unexpected file descriptor. Expected was %d but was %d\n", fds[0], last);
         return false;
@@ -267,13 +267,13 @@ static bool test_random_good_paths(void)
 {
     #define NUMDIR 1000
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = NUMDIR,
         .max_opened_files = NUMDIR,
         .mem_size = MSIZE
     };
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd)
     {
         printf("++ Failed in first init\n");
@@ -295,7 +295,7 @@ static bool test_random_good_paths(void)
     }
 
     for (size_t i = 0; i < NUMDIR; i++)
-        if (imfs_open(ssd, random_path(1), SS_CREAT) <= 0)
+        if (imfs_open(ssd, random_path(1), IMFS_CREAT) <= 0)
         {
             printf("++ Error in file creation\n");
             return false;
@@ -311,7 +311,7 @@ static bool test_common_usage(void)
     #define RBLEN 1000
     #define FNAME_MAX_LEN 5
     memset(base_mem, 0, MSIZE);
-    struct ss_conf c = {
+    struct imfs_conf c = {
         .max_num_fnodes = 2*NUMDIR,
         .max_opened_files = NUMDIR,
         .mem_size = MSIZE
@@ -334,7 +334,7 @@ static bool test_common_usage(void)
     }
 
 
-    struct ss_desc *ssd = imfs_init(base_mem, &c, true);
+    struct imfs *ssd = imfs_init(base_mem, &c, true);
     if (!ssd)
     {
         printf("++ Failed in first init\n");
@@ -355,7 +355,7 @@ static bool test_common_usage(void)
         p = stpcpy(p, fnames[i]);
         *p = '\0';
         
-        int fd = imfs_open(ssd, comp_path, SS_CREAT | SS_RDWR);
+        int fd = imfs_open(ssd, comp_path, IMFS_CREAT | IMFS_RDWR);
         if (fd <= 0)
         {
             printf("++ Failed in first file opening. fd = %d\n", fd);
@@ -383,7 +383,7 @@ static bool test_common_usage(void)
     }
 
     // Second round
-    struct ss_desc *ssd2 = imfs_init(base_mem, &c, false);
+    struct imfs *ssd2 = imfs_init(base_mem, &c, false);
     if (!ssd2)
     {
         printf("++ Failed in second init\n");
@@ -397,7 +397,7 @@ static bool test_common_usage(void)
         p = stpcpy(p, fnames[i]);
         *p = '\0';
 
-        int fd = imfs_open(ssd2, comp_path, SS_CREAT | SS_RDWR | SS_APPEND);
+        int fd = imfs_open(ssd2, comp_path, IMFS_CREAT | IMFS_RDWR | IMFS_APPEND);
         if (fd <= 0)
         {
             printf("++ Failed in second file opening. fd = %d\n", fd);
@@ -419,7 +419,7 @@ static bool test_common_usage(void)
         }
 
         // Reopen without APPEND, so read should return no bytes
-        fd = imfs_open(ssd2, comp_path, SS_CREAT | SS_RDWR);
+        fd = imfs_open(ssd2, comp_path, IMFS_CREAT | IMFS_RDWR);
         if (fd <= 0)
         {
             printf("++ Failed in third file opening. fd = %d\n", fd);

@@ -1,3 +1,21 @@
+/*
+ * Copyright 2024 Raffaele del Gaudio
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+ * and associated documentation files (the “Software”), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ * The above copyright notice and this permission notice shall be included in all copies or substantial
+ * portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+ * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 #ifndef IMFS_H
 #define IMFS_H
 
@@ -19,16 +37,16 @@
  * NOTE: This is a minimum value that is rounded to a multiple
  * of the direlem struct size
  */
-#define SS_MIN_DATA_BLOCK_SIZE_POW2 8
+#define IMFS_MIN_DATA_BLOCK_SIZE_POW2 8
 
 /*
  * The max length for a file or a directory name
  */
-#define SS_MAX_NAME_LEN 32
+#define IMFS_MAX_NAME_LEN 32
 
-struct ss_desc;
+struct imfs;
 
-struct ss_conf {
+struct imfs_conf {
     size_t mem_size;
     size_t max_num_fnodes;
     unsigned int max_opened_files;
@@ -39,28 +57,28 @@ struct ss_conf {
  */
 
 /* Open the file in read-only mode */
-#define SS_RDONLY   0
+#define IMFS_RDONLY   0
 /* Open the file in read-write mode */
-#define SS_RDWR     1
+#define IMFS_RDWR     1
 /* Create the file if it does not exists */
-#define SS_CREAT    2
+#define IMFS_CREAT    2
 /* Start writing at the end of the file */
-#define SS_APPEND   4
+#define IMFS_APPEND   4
 
 /*
- * Initialize a SS at [base] with [conf] as configuration.
- * If [format] is false and a SS is already initialized at [base]
- * this function just returns the descriptor of the previous SS
+ * Initialize a IMFS at [base] with [conf] as configuration.
+ * If [format] is false and a IMFS is already initialized at [base]
+ * this function just returns the descriptor of the previous IMFS
  * (This acts as a "mount" operation).
- * If [format] is true then a new SS is created with no regards
- * of previous (if any) SS with [conf] as configuration.
+ * If [format] is true then a new IMFS is created with no regards
+ * of previous (if any) IMFS with [conf] as configuration.
  */
-struct ss_desc *imfs_init(char *base, struct ss_conf *conf, bool format);
+struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format);
 
-int imfs_mkdir(struct ss_desc *ssd, const char *pathname);
-int imfs_open(struct ss_desc *ssd, const char *pathname, int flags);
-int imfs_close(struct ss_desc *ssd, int fd);
-ssize_t imfs_read(struct ss_desc *ssd, int fd, void *buf, size_t count);
-ssize_t imfs_write(struct ss_desc *ssd, int fd, const void *buf, size_t count);
+int imfs_mkdir(struct imfs *fs, const char *pathname);
+int imfs_open(struct imfs *fs, const char *pathname, int flags);
+int imfs_close(struct imfs *fs, int fd);
+ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count);
+ssize_t imfs_write(struct imfs *fs, int fd, const void *buf, size_t count);
 
 #endif

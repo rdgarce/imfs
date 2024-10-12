@@ -1,10 +1,28 @@
+/*
+ * Copyright 2024 Raffaele del Gaudio
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+ * and associated documentation files (the “Software”), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ * The above copyright notice and this permission notice shall be included in all copies or substantial
+ * portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+ * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 #include "imfs.h"
 #include <string.h>
 #include <assert.h>
 #include <stdint.h>
 #include <limits.h>
 
-_Static_assert(SS_MIN_DATA_BLOCK_SIZE_POW2 > 5,
+_Static_assert(IMFS_MIN_DATA_BLOCK_SIZE_POW2 > 5,
     "Minimum file data block size is 64 bytes.");
 
 #define ALIGN_ADDR_POW2(addr, pow2)                 \
@@ -14,13 +32,13 @@ _Static_assert(SS_MIN_DATA_BLOCK_SIZE_POW2 > 5,
         addr_ += - addr_ & (pow2_ - 1UL);           \
     })
 
-#define SS_PRE_ADJ_DATA_BLOCK_SIZE                  \
-    (1UL << SS_MIN_DATA_BLOCK_SIZE_POW2)
+#define IMFS_PRE_ADJ_DATA_BLOCK_SIZE                \
+    (1UL << IMFS_MIN_DATA_BLOCK_SIZE_POW2)
 
 struct direlem {
     size_t fnodeID;
     unsigned char name_len;
-    char name[SS_MAX_NAME_LEN];
+    char name[IMFS_MAX_NAME_LEN];
 };
 /* Statically defined fnodeid for the '/' directory */
 #define ROOT_DIR_FNODEID 0
@@ -30,7 +48,7 @@ struct direlem {
  * block approximated by the excess
  */
 #define DIRELEM_PER_FDB                             \
-    ((SS_PRE_ADJ_DATA_BLOCK_SIZE +                  \
+    ((IMFS_PRE_ADJ_DATA_BLOCK_SIZE +                \
     sizeof(struct direlem) - 1)/                    \
     sizeof(struct direlem))
 
@@ -42,7 +60,7 @@ struct direlem {
  * so that a file data block can be safely interpreted as an
  * array of DIRELEM_PER_FDB struct direlem elements
  */
-#define SS_DATA_BLOCK_SIZE                          \
+#define IMFS_DATA_BLOCK_SIZE                        \
     (sizeof(struct direlem) *                       \
     DIRELEM_PER_FDB)
 
@@ -54,7 +72,7 @@ struct fdatablock {
         /* xor is used while allocated to a fnode as next ^ prev */
         uintptr_t xor;
     } h;
-    char _Alignas(struct direlem) data[SS_DATA_BLOCK_SIZE];
+    char _Alignas(struct direlem) data[IMFS_DATA_BLOCK_SIZE];
 };
 // We want to use the LSB of [h.next] to store allocation
 // status so we need to impose a minimum alignment of 2
@@ -101,7 +119,7 @@ struct ssfile {
 static const char ss_magic[] = {24, 10, 98, 06, 05, 99, 1, 1};
 #define SS_MAGIC_SIZE (sizeof(ss_magic)/sizeof(ss_magic[0]))
 
-struct ss_desc {
+struct imfs {
     /* size of the whole available memory */
     size_t mem_size;
     
@@ -131,7 +149,7 @@ struct ss_desc {
 
 #define FDATABLOCK_IS_VALID(ssd, fdb)               \
     ({                                              \
-        struct ss_desc *ssd_ = ssd;                 \
+        struct imfs *ssd_ = ssd;                    \
         uintptr_t fdb_ = (uintptr_t)fdb;            \
         uintptr_t start_ =                          \
             (uintptr_t)&ssd_->fb[0];                \
@@ -147,7 +165,7 @@ struct ss_desc {
         (uintptr_t)fdb_->h.next & 1;                \
     })
 
-static struct fdatablock *alloc_fdatablock(struct ss_desc *ssd)
+static struct fdatablock *alloc_fdatablock(struct imfs *ssd)
 {
     // At this level we ASSUME a valid ss_desc
     assert(ssd);
@@ -165,7 +183,7 @@ static struct fdatablock *alloc_fdatablock(struct ss_desc *ssd)
     return new;
 }
 
-static void free_fdatablock(struct ss_desc *ssd, struct fdatablock *fdb)
+static void free_fdatablock(struct imfs *ssd, struct fdatablock *fdb)
 {
     assert(ssd && FDATABLOCK_IS_VALID(ssd, fdb));
     // Catch double frees
@@ -180,7 +198,7 @@ static void free_fdatablock(struct ss_desc *ssd, struct fdatablock *fdb)
 
 #define FNODE_IS_VALID(ssd, f)                      \
     ({                                              \
-        struct ss_desc *ssd_ = ssd;                 \
+        struct imfs *ssd_ = ssd;                    \
         uintptr_t f_ = (uintptr_t)f;                \
         uintptr_t start_ =                          \
             (uintptr_t)&ssd_->fn[0];                \
@@ -192,7 +210,7 @@ static void free_fdatablock(struct ss_desc *ssd, struct fdatablock *fdb)
 #define FNODE_IS_FREE(ssd, f)                       \
     FNODE_IS_VALID(ssd, ((struct fnode *)f)->next)
 
-static struct fnode *alloc_fnode(struct ss_desc *ssd)
+static struct fnode *alloc_fnode(struct imfs *ssd)
 {
     // At this level we ASSUME a valid ss_desc
     assert(ssd);
@@ -224,7 +242,7 @@ static struct fnode *alloc_fnode(struct ss_desc *ssd)
     return new;
 }
 
-static void free_fnode(struct ss_desc *ssd, struct fnode *f)
+static void free_fnode(struct imfs *ssd, struct fnode *f)
 {
     // Valid [ssd] and [f] is assumed here
     assert(ssd && FNODE_IS_VALID(ssd, f));
@@ -256,7 +274,7 @@ static void free_fnode(struct ss_desc *ssd, struct fnode *f)
 
 /* ------------------------------------------------------------------------- */
 
-static void append_fdatablock_to_fnode(struct ss_desc *ssd, struct fnode *dst,
+static void append_fdatablock_to_fnode(struct imfs *ssd, struct fnode *dst,
                 struct fdatablock *src)
 {
     assert(ssd && FNODE_IS_VALID(ssd, dst) && !FNODE_IS_FREE(ssd, dst) &&
@@ -295,7 +313,7 @@ static void append_fdatablock_to_fnode(struct ss_desc *ssd, struct fnode *dst,
     }
 }
 
-static struct fdatablock *pop_fdatablock_from_fnode(struct ss_desc *ssd,
+static struct fdatablock *pop_fdatablock_from_fnode(struct imfs *ssd,
                             struct fnode *src)
 {
     assert(ssd &&
@@ -335,17 +353,17 @@ static struct fdatablock *pop_fdatablock_from_fnode(struct ss_desc *ssd,
 
             src->data_blocks_tail = tail_prev;
         }
-        src->last_block_used = SS_DATA_BLOCK_SIZE;
+        src->last_block_used = IMFS_DATA_BLOCK_SIZE;
     }
     
     return block;
 }
 
-static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
+static ssize_t append_bytes_to_fnode(struct imfs *ssd, struct fnode *f,
                 const void *buf, size_t len, size_t alignment)
 {
     assert(ssd && buf && len <= SSIZE_MAX &&
-            alignment < SS_DATA_BLOCK_SIZE &&
+            alignment < IMFS_DATA_BLOCK_SIZE &&
             (alignment & (alignment - 1UL)) == 0 &&
             FNODE_IS_VALID(ssd, f) && !FNODE_IS_FREE(ssd, f));
     
@@ -362,7 +380,7 @@ static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
     size_t pad = -(uintptr_t)
         (&f->data_blocks_tail->data[f->last_block_used]) &
         (alignment - 1UL);
-    if (f->last_block_used + pad < SS_DATA_BLOCK_SIZE)
+    if (f->last_block_used + pad < IMFS_DATA_BLOCK_SIZE)
         f->last_block_used += pad;
     else
     {
@@ -372,14 +390,14 @@ static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
         pad = -(uintptr_t)
             (&f->data_blocks_tail->data[f->last_block_used]) &
             (alignment - 1UL);
-        assert(pad < SS_DATA_BLOCK_SIZE);
+        assert(pad < IMFS_DATA_BLOCK_SIZE);
         f->last_block_used += pad;
     }
     
     char *cbuf = (char *)buf;
     size_t tot_written = 0;
     
-    size_t avlbl = SS_DATA_BLOCK_SIZE - f->last_block_used;
+    size_t avlbl = IMFS_DATA_BLOCK_SIZE - f->last_block_used;
     size_t to_write = len - tot_written;
     size_t w_len = avlbl < to_write ? avlbl : to_write;
     memcpy(&f->data_blocks_tail->data[f->last_block_used],
@@ -392,7 +410,7 @@ static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
         struct fdatablock *new = alloc_fdatablock(ssd);
         if (!new) return -1;
         append_fdatablock_to_fnode(ssd, f, new);
-        avlbl = SS_DATA_BLOCK_SIZE - f->last_block_used;
+        avlbl = IMFS_DATA_BLOCK_SIZE - f->last_block_used;
         to_write = len - tot_written;
         w_len = avlbl < to_write ? avlbl : to_write;
         memcpy(&f->data_blocks_tail->data[f->last_block_used],
@@ -408,7 +426,7 @@ static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
 
 #define SSFILE_IS_VALID(ssd, s)                     \
     ({                                              \
-        struct ss_desc *ssd_ = ssd;                 \
+        struct imfs *ssd_ = ssd;                    \
         uintptr_t s_ = (uintptr_t)s;                \
         uintptr_t start_ =                          \
             (uintptr_t)&ssd_->ssf[0];               \
@@ -421,7 +439,7 @@ static ssize_t append_bytes_to_fnode(struct ss_desc *ssd, struct fnode *f,
         SSFILE_IS_VALID(ssd,                        \
             ((struct ssfile *)s)->next)
 
-static struct ssfile *alloc_ssfile(struct ss_desc *ssd)
+static struct ssfile *alloc_ssfile(struct imfs *ssd)
 {
     assert(ssd);
 
@@ -445,7 +463,7 @@ static struct ssfile *alloc_ssfile(struct ss_desc *ssd)
     return new;
 }
 
-static void free_ssfile(struct ss_desc *ssd, struct ssfile *ssf)
+static void free_ssfile(struct imfs *ssd, struct ssfile *ssf)
 {
     assert(ssd && SSFILE_IS_VALID(ssd, ssf));
     
@@ -463,7 +481,7 @@ static void free_ssfile(struct ss_desc *ssd, struct ssfile *ssf)
     }
 }
 
-static unsigned int get_ssfileID(struct ss_desc *ssd, struct ssfile *ssf)
+static unsigned int get_ssfileID(struct imfs *ssd, struct ssfile *ssf)
 {
     assert(ssd && SSFILE_IS_VALID(ssd, ssf));
     return (unsigned int)(ssf - ssd->ssf);
@@ -471,13 +489,13 @@ static unsigned int get_ssfileID(struct ss_desc *ssd, struct ssfile *ssf)
 
 /* ------------------------------------------------------------------------- */
 
-static size_t get_fnodeID(struct ss_desc *ssd, struct fnode *f)
+static size_t get_fnodeID(struct imfs *ssd, struct fnode *f)
 {
     assert(ssd && FNODE_IS_VALID(ssd, f));
     return (size_t)(f - ssd->fn);
 }
 
-static int init_fnode_as_dir(struct ss_desc *ssd, struct fnode *f,
+static int init_fnode_as_dir(struct imfs *ssd, struct fnode *f,
                 size_t parentID)
 {
     assert(ssd && FNODE_IS_VALID(ssd, f) &&
@@ -509,12 +527,12 @@ static int init_fnode_as_dir(struct ss_desc *ssd, struct fnode *f,
     return 0;
 }
 
-static bool search_son_in_dir(struct ss_desc *ssd, struct fnode *dir,
+static bool search_son_in_dir(struct imfs *ssd, struct fnode *dir,
                 const char *son_name, size_t name_len, size_t *sonID)
 {
     assert(ssd && FNODE_IS_VALID(ssd, dir) &&
         !FNODE_IS_FREE(ssd, dir) && dir->type == SS_DIR &&
-        son_name && name_len <= SS_MAX_NAME_LEN);
+        son_name && name_len <= IMFS_MAX_NAME_LEN);
     
     size_t ID;
     bool found = false;
@@ -601,7 +619,7 @@ static bool search_son_in_dir(struct ss_desc *ssd, struct fnode *dir,
  * the file/directory itself (it already exist).
  * Let's use a flag "parent" that will stop the traversal to the parent
  */
-static char *pathname_lookup(struct ss_desc *ssd, const char *pathname,
+static char *pathname_lookup(struct imfs *ssd, const char *pathname,
                 bool parent, size_t *fnodeID, size_t *last_len)
 {
     assert(ssd && pathname && fnodeID && last_len &&
@@ -617,10 +635,10 @@ static char *pathname_lookup(struct ss_desc *ssd, const char *pathname,
     do
     {
         while ('\0' != *p && '/' != *p &&
-            p - last_head <= SS_MAX_NAME_LEN)
+            p - last_head <= IMFS_MAX_NAME_LEN)
             p++;
 
-        if (p - last_head > SS_MAX_NAME_LEN)
+        if (p - last_head > IMFS_MAX_NAME_LEN)
         {
             last_head = NULL;
             break;
@@ -689,7 +707,7 @@ static char *pathname_lookup(struct ss_desc *ssd, const char *pathname,
     return last_head;
 }
 
-int imfs_mkdir(struct ss_desc *ssd, const char *pathname)
+int imfs_mkdir(struct imfs *ssd, const char *pathname)
 {
     if (!ssd || !pathname) return -1;
     
@@ -699,7 +717,7 @@ int imfs_mkdir(struct ss_desc *ssd, const char *pathname)
                     true, &parentID, &last_len);
     if (!last) return -1;
     
-    assert(last_len <= SS_MAX_NAME_LEN
+    assert(last_len <= IMFS_MAX_NAME_LEN
             && parentID < ssd->fn_len &&
             !FNODE_IS_FREE(ssd, &ssd->fn[parentID]) &&
             ssd->fn[parentID].type == SS_DIR);
@@ -720,7 +738,7 @@ int imfs_mkdir(struct ss_desc *ssd, const char *pathname)
         .fnodeID = newdirID,
         .name_len = last_len
     };
-    strncpy(de.name, last, SS_MAX_NAME_LEN);
+    strncpy(de.name, last, IMFS_MAX_NAME_LEN);
 
     if (append_bytes_to_fnode(ssd, &ssd->fn[parentID],
         &de, sizeof(de), _Alignof(de))
@@ -729,18 +747,18 @@ int imfs_mkdir(struct ss_desc *ssd, const char *pathname)
     return 0;
 }
 
-int imfs_open(struct ss_desc *ssd, const char *pathname, int flags)
+int imfs_open(struct imfs *ssd, const char *pathname, int flags)
 {
     if (!ssd || !pathname) return -1;
 
     size_t fID;
     size_t len;
-    bool create = flags & SS_CREAT;
+    bool create = flags & IMFS_CREAT;
     char *last = pathname_lookup(ssd ,pathname, create,
                     &fID, &len);
     if (!last) return -1;
 
-    assert(len <= SS_MAX_NAME_LEN && fID < ssd->fn_len &&
+    assert(len <= IMFS_MAX_NAME_LEN && fID < ssd->fn_len &&
             !FNODE_IS_FREE(ssd, &ssd->fn[fID]));
     
     if (create && !search_son_in_dir(ssd, &ssd->fn[fID],
@@ -758,7 +776,7 @@ int imfs_open(struct ss_desc *ssd, const char *pathname, int flags)
             .fnodeID = get_fnodeID(ssd, newfilenode),
             .name_len = len
         };
-        strncpy(newfile.name, last, SS_MAX_NAME_LEN);
+        strncpy(newfile.name, last, IMFS_MAX_NAME_LEN);
 
         if(append_bytes_to_fnode(ssd, &ssd->fn[fID], &newfile,
             sizeof(newfile), _Alignof(newfile))
@@ -773,7 +791,7 @@ int imfs_open(struct ss_desc *ssd, const char *pathname, int flags)
     struct ssfile *ssf = alloc_ssfile(ssd);
     if (!ssf) return -1;
     
-    if (!(flags & SS_APPEND))
+    if (!(flags & IMFS_APPEND))
     {
         // File has to be overwritten
         // NOTE: Consider optimizing with one function that
@@ -787,12 +805,12 @@ int imfs_open(struct ss_desc *ssd, const char *pathname, int flags)
     ssf->read_ptr.curr = NULL;
     ssf->read_ptr.prev = NULL;
     ssf->read_ptr.b_index = 0;
-    ssf->readonly = !(flags & SS_RDWR);
+    ssf->readonly = !(flags & IMFS_RDWR);
 
     return get_ssfileID(ssd, ssf) + 1;
 }
 
-int imfs_close(struct ss_desc *ssd, int fd)
+int imfs_close(struct imfs *ssd, int fd)
 {
     fd--;
     if(!ssd || fd < 0 ||
@@ -805,7 +823,7 @@ int imfs_close(struct ss_desc *ssd, int fd)
     return 0;
 }
 
-ssize_t imfs_read(struct ss_desc *ssd, int fd, void *buf, size_t count)
+ssize_t imfs_read(struct imfs *ssd, int fd, void *buf, size_t count)
 {
     fd--;
     if(!ssd || fd < 0 ||
@@ -871,7 +889,7 @@ ssize_t imfs_read(struct ss_desc *ssd, int fd, void *buf, size_t count)
         
         last = r_next == ssd->fn[fID].data_blocks_head;
         block_size = last * ssd->fn[fID].last_block_used +
-            (1 - last) * SS_DATA_BLOCK_SIZE;
+            (1 - last) * IMFS_DATA_BLOCK_SIZE;
         
         assert(r_b_index <= block_size);
 
@@ -883,7 +901,7 @@ ssize_t imfs_read(struct ss_desc *ssd, int fd, void *buf, size_t count)
         r_b_index += r_len;
         
         // Update pointer
-        if (r_b_index == SS_DATA_BLOCK_SIZE && !last)
+        if (r_b_index == IMFS_DATA_BLOCK_SIZE && !last)
         {
             r_b_index = 0;
             r_prev = r_curr;
@@ -900,7 +918,7 @@ ssize_t imfs_read(struct ss_desc *ssd, int fd, void *buf, size_t count)
     return tot_read;
 }
 
-ssize_t imfs_write(struct ss_desc *ssd, int fd, const void *buf, size_t count)
+ssize_t imfs_write(struct imfs *ssd, int fd, const void *buf, size_t count)
 {
     fd--;
     if(!ssd || !buf || fd < 0 || (size_t)fd >= ssd->ssf_len ||
@@ -921,11 +939,11 @@ ssize_t imfs_write(struct ss_desc *ssd, int fd, const void *buf, size_t count)
     return append_bytes_to_fnode(ssd, &ssd->fn[fID], buf, count, 1);
 }
 
-struct ss_desc *imfs_init(char *base, struct ss_conf *conf, bool format)
+struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format)
 {
-    struct ss_desc *ssd = (struct ss_desc *)
+    struct imfs *ssd = (struct imfs *)
         ALIGN_ADDR_POW2(base + SS_MAGIC_SIZE,
-            _Alignof(struct ss_desc));
+            _Alignof(struct imfs));
 
     if (!format && !memcmp(base, ss_magic, SS_MAGIC_SIZE))
         return ssd;

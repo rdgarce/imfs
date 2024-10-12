@@ -2,10 +2,13 @@ CC = gcc
 CFLAGS = -Wall -Wextra
 
 
-.PHONY: default tests cov clean
+.PHONY: default example tests cov clean
 
 default: imfs.c
 	$(CC) $(CFLAGS) -c $^
+
+example: imfs.c example.c
+	$(CC) $(CFLAGS) $^ -o $@
 
 tests: CFLAGS += -fsanitize=address -g -O0
 tests: tests.c imfs.c
@@ -20,4 +23,4 @@ cov: tests
 	@rm -f *.gcda *.gcno *.gcov *.lcov
 
 clean:
-	rm -rf cov tests *.o *.gcda *.gcno
+	rm -rf cov example tests *.o *.gcda *.gcno
