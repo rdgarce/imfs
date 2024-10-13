@@ -117,8 +117,8 @@ struct ssfile {
     bool readonly;
 };
 
-static const char ss_magic[] = {24, 10, 98, 06, 05, 99, 1, 1};
-#define SS_MAGIC_SIZE (sizeof(ss_magic)/sizeof(ss_magic[0]))
+static const char imfs_magic[] = {24, 10, 98, 06, 05, 99, 1, 1};
+#define IMFS_SS_MAGIC_SIZE (sizeof(imfs_magic)/sizeof(imfs_magic[0]))
 
 struct imfs {
     /* size of the whole available memory */
@@ -755,6 +755,7 @@ int imfs_open(struct imfs *fs, const char *pathname, int flags)
     size_t fID;
     size_t len;
     bool create = flags & IMFS_CREAT;
+    bool rdwr = flags & IMFS_RDWR;
     char *last = pathname_lookup(fs ,pathname, create,
                     &fID, &len);
     if (!last) return -1;
@@ -792,9 +793,9 @@ int imfs_open(struct imfs *fs, const char *pathname, int flags)
     struct ssfile *ssf = alloc_ssfile(fs);
     if (!ssf) return -1;
     
-    if (!(flags & IMFS_APPEND))
+    if (flags & IMFS_TRUNC && rdwr)
     {
-        // File has to be overwritten
+        // File truncation
         // NOTE: Consider optimizing with one function that
         // frees all the block of the file apart from the first
         struct fdatablock *p;
@@ -806,7 +807,7 @@ int imfs_open(struct imfs *fs, const char *pathname, int flags)
     ssf->read_ptr.curr = NULL;
     ssf->read_ptr.prev = NULL;
     ssf->read_ptr.b_index = 0;
-    ssf->readonly = !(flags & IMFS_RDWR);
+    ssf->readonly = !rdwr;
 
     return get_ssfileID(fs, ssf) + 1;
 }
@@ -940,13 +941,14 @@ ssize_t imfs_write(struct imfs *fs, int fd, const void *buf, size_t count)
     return append_bytes_to_fnode(fs, &fs->fn[fID], buf, count, 1);
 }
 
-struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format)
+struct imfs *
+imfs_init(char *base, size_t size, struct imfs_conf *conf, bool format)
 {
     struct imfs *fs = (struct imfs *)
-        ALIGN_ADDR_POW2(base + SS_MAGIC_SIZE,
+        ALIGN_ADDR_POW2(base + IMFS_SS_MAGIC_SIZE,
             _Alignof(struct imfs));
 
-    if (!format && !memcmp(base, ss_magic, SS_MAGIC_SIZE))
+    if (!format && !memcmp(base, imfs_magic, IMFS_SS_MAGIC_SIZE))
         return fs;
     
     if(!conf || conf->max_opened_files >= INT_MAX) return NULL;
@@ -964,18 +966,17 @@ struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format)
 
     // Invalid fs descriptor is returned if
     // we have no space for at least one fdatablock
-    if (((uintptr_t)base + conf->mem_size) <=
+    if (((uintptr_t)base + size) <=
         (uintptr_t)(fdatablocks+1)) return NULL;
     
-    memcpy(base, ss_magic, SS_MAGIC_SIZE);
-    fs->mem_size = conf->mem_size;
+    memcpy(base, imfs_magic, IMFS_SS_MAGIC_SIZE);
+    fs->mem_size = size;
     fs->ssf = ssfiles;
     fs->ssf_len = conf->max_opened_files;
     fs->fn = fnodes;
     fs->fn_len = conf->max_num_fnodes + 1;
     fs->fb = fdatablocks;
-    fs->fb_len = ((uintptr_t)base +
-                    conf->mem_size -
+    fs->fb_len = ((uintptr_t)base + size -
                     (uintptr_t)fdatablocks) /
                     sizeof(struct fdatablock);
 

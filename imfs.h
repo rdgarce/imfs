@@ -47,7 +47,6 @@
 struct imfs;
 
 struct imfs_conf {
-    size_t mem_size;
     size_t max_num_fnodes;
     unsigned int max_opened_files;
 };
@@ -62,11 +61,8 @@ struct imfs_conf {
 #define IMFS_RDWR     1
 /* Create the file if it does not exists */
 #define IMFS_CREAT    2
-/* 
- * Start writing at the end of the file.
- * If not specified, the file is erased
- */
-#define IMFS_APPEND   4
+/* Truncate the file */
+#define IMFS_TRUNC    4
 
 /*
  * Initialize a IMFS at [base] with [conf] as configuration.
@@ -76,7 +72,8 @@ struct imfs_conf {
  * If [format] is true then a new IMFS is created with no regards
  * of previous (if any) IMFS with [conf] as configuration.
  */
-struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format);
+struct imfs *
+imfs_init(char *base, size_t size, struct imfs_conf *conf, bool format);
 
 int imfs_mkdir(struct imfs *fs, const char *pathname);
 int imfs_open(struct imfs *fs, const char *pathname, int flags);
