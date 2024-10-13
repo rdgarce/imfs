@@ -148,14 +148,14 @@ struct imfs {
 
 /* ------------------------------------------------------------------------- */
 
-#define FDATABLOCK_IS_VALID(ssd, fdb)               \
+#define FDATABLOCK_IS_VALID(fs, fdb)               \
     ({                                              \
-        struct imfs *ssd_ = ssd;                    \
+        struct imfs *fs_ = fs;                    \
         uintptr_t fdb_ = (uintptr_t)fdb;            \
         uintptr_t start_ =                          \
-            (uintptr_t)&ssd_->fb[0];                \
+            (uintptr_t)&fs_->fb[0];                \
         uintptr_t end_ =                            \
-            (uintptr_t)&ssd_->fb[ssd_->fb_len-1];   \
+            (uintptr_t)&fs_->fb[fs_->fb_len-1];   \
         fdb_ >= start_ && fdb_ <= end_ &&           \
         (fdb_ - start_) %                           \
         sizeof(struct fdatablock) == 0;             \
@@ -166,17 +166,17 @@ struct imfs {
         (uintptr_t)fdb_->h.next & 1;                \
     })
 
-static struct fdatablock *alloc_fdatablock(struct imfs *ssd)
+static struct fdatablock *alloc_fdatablock(struct imfs *fs)
 {
     // At this level we ASSUME a valid ss_desc
-    assert(ssd);
+    assert(fs);
     
-    struct fdatablock *new = ssd->fb_fl_head;
+    struct fdatablock *new = fs->fb_fl_head;
     
-    if (ssd->fb_fl_head)
+    if (fs->fb_fl_head)
     {
-        ssd->fb_fl_head = (struct fdatablock *)
-            ((uintptr_t)(ssd->fb_fl_head->h.next)
+        fs->fb_fl_head = (struct fdatablock *)
+            ((uintptr_t)(fs->fb_fl_head->h.next)
             & ~(uintptr_t)1);
         new->h.next = NULL;
     }
@@ -184,51 +184,51 @@ static struct fdatablock *alloc_fdatablock(struct imfs *ssd)
     return new;
 }
 
-static void free_fdatablock(struct imfs *ssd, struct fdatablock *fdb)
+static void free_fdatablock(struct imfs *fs, struct fdatablock *fdb)
 {
-    assert(ssd && FDATABLOCK_IS_VALID(ssd, fdb));
+    assert(fs && FDATABLOCK_IS_VALID(fs, fdb));
     // Catch double frees
     if (FDATABLOCK_IS_FREE(fdb)) return;
     
     fdb->h.next = (struct fdatablock *)
-        ((uintptr_t)ssd->fb_fl_head | (uintptr_t)1);
-    ssd->fb_fl_head = fdb;
+        ((uintptr_t)fs->fb_fl_head | (uintptr_t)1);
+    fs->fb_fl_head = fdb;
 }
 
 /* ------------------------------------------------------------------------- */
 
-#define FNODE_IS_VALID(ssd, f)                      \
+#define FNODE_IS_VALID(fs, f)                      \
     ({                                              \
-        struct imfs *ssd_ = ssd;                    \
+        struct imfs *fs_ = fs;                    \
         uintptr_t f_ = (uintptr_t)f;                \
         uintptr_t start_ =                          \
-            (uintptr_t)&ssd_->fn[0];                \
+            (uintptr_t)&fs_->fn[0];                \
         uintptr_t end_ =                            \
-            (uintptr_t)&ssd_->fn[ssd_->fn_len-1];   \
+            (uintptr_t)&fs_->fn[fs_->fn_len-1];   \
         f_ >= start_ && f_ <= end_ &&               \
         (f_ - start_) % sizeof(struct fnode) == 0;  \
     })
-#define FNODE_IS_FREE(ssd, f)                       \
-    FNODE_IS_VALID(ssd, ((struct fnode *)f)->next)
+#define FNODE_IS_FREE(fs, f)                       \
+    FNODE_IS_VALID(fs, ((struct fnode *)f)->next)
 
-static struct fnode *alloc_fnode(struct imfs *ssd)
+static struct fnode *alloc_fnode(struct imfs *fs)
 {
     // At this level we ASSUME a valid ss_desc
-    assert(ssd);
-    struct fnode *new = ssd->fn_cfl_tail;
+    assert(fs);
+    struct fnode *new = fs->fn_cfl_tail;
     
-    if (ssd->fn_cfl_tail)
+    if (fs->fn_cfl_tail)
     {
-        if(ssd->fn_cfl_tail == 
-            ssd->fn_cfl_tail->next)
+        if(fs->fn_cfl_tail == 
+            fs->fn_cfl_tail->next)
             // We're removing the last element of the list
-            ssd->fn_cfl_tail = NULL;
+            fs->fn_cfl_tail = NULL;
         else
         {
             // List has more than one element so we have to
             // remove the one following the tail
-            new = ssd->fn_cfl_tail->next;
-            ssd->fn_cfl_tail->next = new->next;
+            new = fs->fn_cfl_tail->next;
+            fs->fn_cfl_tail->next = new->next;
         }
         // We init next to NULL because this is the 
         // way we can tell apart allocated nodes from free ones
@@ -243,10 +243,10 @@ static struct fnode *alloc_fnode(struct imfs *ssd)
     return new;
 }
 
-static void free_fnode(struct imfs *ssd, struct fnode *f)
+static void free_fnode(struct imfs *fs, struct fnode *f)
 {
-    // Valid [ssd] and [f] is assumed here
-    assert(ssd && FNODE_IS_VALID(ssd, f));
+    // Valid [fs] and [f] is assumed here
+    assert(fs && FNODE_IS_VALID(fs, f));
     // Double freeing the node? I don't think so!
     // Considering we have an array of fnode - [fnodes] -
     // and a circular linked list of free fnode starting
@@ -256,30 +256,30 @@ static void free_fnode(struct imfs *ssd, struct fnode *f)
     // point to a fnode. Since any fnode resides in the
     // [fnodes] array we can just check that [f]->next
     // points to an fnode contained in the [fnodes] array.
-    if (FNODE_IS_FREE(ssd, f)) return;
+    if (FNODE_IS_FREE(fs, f)) return;
     
     // Ok, so we need to actually free the node [f]
-    if(ssd->fn_cfl_tail)
+    if(fs->fn_cfl_tail)
     {
         // Inserting in the circular queue after the tail
-        f->next = ssd->fn_cfl_tail->next;
-        ssd->fn_cfl_tail->next = f;
+        f->next = fs->fn_cfl_tail->next;
+        fs->fn_cfl_tail->next = f;
     }
     else
     {
         // Freelist was empty and this is the only element
-        ssd->fn_cfl_tail = f;
+        fs->fn_cfl_tail = f;
         f->next = f;
     }
 }
 
 /* ------------------------------------------------------------------------- */
 
-static void append_fdatablock_to_fnode(struct imfs *ssd, struct fnode *dst,
+static void append_fdatablock_to_fnode(struct imfs *fs, struct fnode *dst,
                 struct fdatablock *src)
 {
-    assert(ssd && FNODE_IS_VALID(ssd, dst) && !FNODE_IS_FREE(ssd, dst) &&
-        FDATABLOCK_IS_VALID(ssd, src) && !FDATABLOCK_IS_FREE(src));
+    assert(fs && FNODE_IS_VALID(fs, dst) && !FNODE_IS_FREE(fs, dst) &&
+        FDATABLOCK_IS_VALID(fs, src) && !FDATABLOCK_IS_FREE(src));
     
     assert((dst->data_blocks_head && dst->data_blocks_tail) ||
         (!dst->data_blocks_head && !dst->data_blocks_tail));
@@ -314,11 +314,11 @@ static void append_fdatablock_to_fnode(struct imfs *ssd, struct fnode *dst,
     }
 }
 
-static struct fdatablock *pop_fdatablock_from_fnode(struct imfs *ssd,
+static struct fdatablock *pop_fdatablock_from_fnode(struct imfs *fs,
                             struct fnode *src)
 {
-    assert(ssd &&
-        FNODE_IS_VALID(ssd, src) && !FNODE_IS_FREE(ssd, src));
+    assert(fs &&
+        FNODE_IS_VALID(fs, src) && !FNODE_IS_FREE(fs, src));
 
     struct fdatablock *block = src->data_blocks_tail;
 
@@ -360,20 +360,20 @@ static struct fdatablock *pop_fdatablock_from_fnode(struct imfs *ssd,
     return block;
 }
 
-static ssize_t append_bytes_to_fnode(struct imfs *ssd, struct fnode *f,
+static ssize_t append_bytes_to_fnode(struct imfs *fs, struct fnode *f,
                 const void *buf, size_t len, size_t alignment)
 {
-    assert(ssd && buf && len <= SSIZE_MAX &&
+    assert(fs && buf && len <= SSIZE_MAX &&
             alignment < IMFS_DATA_BLOCK_SIZE &&
             (alignment & (alignment - 1UL)) == 0 &&
-            FNODE_IS_VALID(ssd, f) && !FNODE_IS_FREE(ssd, f));
+            FNODE_IS_VALID(fs, f) && !FNODE_IS_FREE(fs, f));
     
     if (0 == len) return 0;
     if (!f->data_blocks_tail)
     {
-        struct fdatablock *first = alloc_fdatablock(ssd);
+        struct fdatablock *first = alloc_fdatablock(fs);
         if (!first) return -1;
-        append_fdatablock_to_fnode(ssd, f, first);
+        append_fdatablock_to_fnode(fs, f, first);
     }
     assert(f->data_blocks_tail && f->data_blocks_head);
     
@@ -385,9 +385,9 @@ static ssize_t append_bytes_to_fnode(struct imfs *ssd, struct fnode *f,
         f->last_block_used += pad;
     else
     {
-        struct fdatablock *new = alloc_fdatablock(ssd);
+        struct fdatablock *new = alloc_fdatablock(fs);
         if (!new) return -1;
-        append_fdatablock_to_fnode(ssd, f, new);
+        append_fdatablock_to_fnode(fs, f, new);
         pad = -(uintptr_t)
             (&f->data_blocks_tail->data[f->last_block_used]) &
             (alignment - 1UL);
@@ -408,9 +408,9 @@ static ssize_t append_bytes_to_fnode(struct imfs *ssd, struct fnode *f,
 
     while (tot_written < len)
     {
-        struct fdatablock *new = alloc_fdatablock(ssd);
+        struct fdatablock *new = alloc_fdatablock(fs);
         if (!new) return -1;
-        append_fdatablock_to_fnode(ssd, f, new);
+        append_fdatablock_to_fnode(fs, f, new);
         avlbl = IMFS_DATA_BLOCK_SIZE - f->last_block_used;
         to_write = len - tot_written;
         w_len = avlbl < to_write ? avlbl : to_write;
@@ -425,38 +425,38 @@ static ssize_t append_bytes_to_fnode(struct imfs *ssd, struct fnode *f,
 
 /* ------------------------------------------------------------------------- */
 
-#define SSFILE_IS_VALID(ssd, s)                     \
+#define SSFILE_IS_VALID(fs, s)                     \
     ({                                              \
-        struct imfs *ssd_ = ssd;                    \
+        struct imfs *fs_ = fs;                    \
         uintptr_t s_ = (uintptr_t)s;                \
         uintptr_t start_ =                          \
-            (uintptr_t)&ssd_->ssf[0];               \
+            (uintptr_t)&fs_->ssf[0];               \
         uintptr_t end_ =                            \
-            (uintptr_t)&ssd_->ssf[ssd_->ssf_len-1]; \
+            (uintptr_t)&fs_->ssf[fs_->ssf_len-1]; \
         s_ >= start_ && s_ <= end_ &&               \
         (s_ - start_) % sizeof(struct ssfile) == 0; \
     })
-#define SSFILE_IS_FREE(ssd, s)                      \
-        SSFILE_IS_VALID(ssd,                        \
+#define SSFILE_IS_FREE(fs, s)                      \
+        SSFILE_IS_VALID(fs,                        \
             ((struct ssfile *)s)->next)
 
-static struct ssfile *alloc_ssfile(struct imfs *ssd)
+static struct ssfile *alloc_ssfile(struct imfs *fs)
 {
-    assert(ssd);
+    assert(fs);
 
-    struct ssfile *new = ssd->ssf_cfl_tail;
+    struct ssfile *new = fs->ssf_cfl_tail;
     
-    if (ssd->ssf_cfl_tail)
+    if (fs->ssf_cfl_tail)
     {
-        if (ssd->ssf_cfl_tail == 
-            ssd->ssf_cfl_tail->next)
+        if (fs->ssf_cfl_tail == 
+            fs->ssf_cfl_tail->next)
         {
-            ssd->ssf_cfl_tail = NULL;
+            fs->ssf_cfl_tail = NULL;
         }
         else
         {
-            new = ssd->ssf_cfl_tail->next;
-            ssd->ssf_cfl_tail->next = new->next;
+            new = fs->ssf_cfl_tail->next;
+            fs->ssf_cfl_tail->next = new->next;
         }
         new->next = NULL;
     }
@@ -464,44 +464,44 @@ static struct ssfile *alloc_ssfile(struct imfs *ssd)
     return new;
 }
 
-static void free_ssfile(struct imfs *ssd, struct ssfile *ssf)
+static void free_ssfile(struct imfs *fs, struct ssfile *ssf)
 {
-    assert(ssd && SSFILE_IS_VALID(ssd, ssf));
+    assert(fs && SSFILE_IS_VALID(fs, ssf));
     
-    if (SSFILE_IS_FREE(ssd, ssf)) return;
+    if (SSFILE_IS_FREE(fs, ssf)) return;
     
-    if (ssd->ssf_cfl_tail)
+    if (fs->ssf_cfl_tail)
     {
-        ssf->next = ssd->ssf_cfl_tail->next;
-        ssd->ssf_cfl_tail->next = ssf;
+        ssf->next = fs->ssf_cfl_tail->next;
+        fs->ssf_cfl_tail->next = ssf;
     }
     else
     {
-        ssd->ssf_cfl_tail = ssf;
+        fs->ssf_cfl_tail = ssf;
         ssf->next = ssf;
     }
 }
 
-static unsigned int get_ssfileID(struct imfs *ssd, struct ssfile *ssf)
+static unsigned int get_ssfileID(struct imfs *fs, struct ssfile *ssf)
 {
-    assert(ssd && SSFILE_IS_VALID(ssd, ssf));
-    return (unsigned int)(ssf - ssd->ssf);
+    assert(fs && SSFILE_IS_VALID(fs, ssf));
+    return (unsigned int)(ssf - fs->ssf);
 }
 
 /* ------------------------------------------------------------------------- */
 
-static size_t get_fnodeID(struct imfs *ssd, struct fnode *f)
+static size_t get_fnodeID(struct imfs *fs, struct fnode *f)
 {
-    assert(ssd && FNODE_IS_VALID(ssd, f));
-    return (size_t)(f - ssd->fn);
+    assert(fs && FNODE_IS_VALID(fs, f));
+    return (size_t)(f - fs->fn);
 }
 
-static int init_fnode_as_dir(struct imfs *ssd, struct fnode *f,
+static int init_fnode_as_dir(struct imfs *fs, struct fnode *f,
                 size_t parentID)
 {
-    assert(ssd && FNODE_IS_VALID(ssd, f) &&
-        !FNODE_IS_FREE(ssd, f) && parentID < ssd->fn_len &&
-        !FNODE_IS_FREE(ssd, &ssd->fn[parentID]));
+    assert(fs && FNODE_IS_VALID(fs, f) &&
+        !FNODE_IS_FREE(fs, f) && parentID < fs->fn_len &&
+        !FNODE_IS_FREE(fs, &fs->fn[parentID]));
     
     f->type = SS_DIR;
 
@@ -518,21 +518,21 @@ static int init_fnode_as_dir(struct imfs *ssd, struct fnode *f,
         }
     };
 
-    init_dirs[0].fnodeID = get_fnodeID(ssd, f);
+    init_dirs[0].fnodeID = get_fnodeID(fs, f);
     init_dirs[1].fnodeID = parentID;
 
-    if (append_bytes_to_fnode(ssd, f, init_dirs,
+    if (append_bytes_to_fnode(fs, f, init_dirs,
         sizeof(init_dirs), _Alignof(init_dirs))
         != (ssize_t)sizeof(init_dirs)) return -1;
 
     return 0;
 }
 
-static bool search_son_in_dir(struct imfs *ssd, struct fnode *dir,
+static bool search_son_in_dir(struct imfs *fs, struct fnode *dir,
                 const char *son_name, size_t name_len, size_t *sonID)
 {
-    assert(ssd && FNODE_IS_VALID(ssd, dir) &&
-        !FNODE_IS_FREE(ssd, dir) && dir->type == SS_DIR &&
+    assert(fs && FNODE_IS_VALID(fs, dir) &&
+        !FNODE_IS_FREE(fs, dir) && dir->type == SS_DIR &&
         son_name && name_len <= IMFS_MAX_NAME_LEN);
     
     size_t ID;
@@ -544,8 +544,8 @@ static bool search_son_in_dir(struct imfs *ssd, struct fnode *dir,
     struct fdatablock *next = NULL;
 
     assert((!curr && !prev) ||
-        (FDATABLOCK_IS_VALID(ssd, curr) &&
-        FDATABLOCK_IS_VALID(ssd, prev) &&
+        (FDATABLOCK_IS_VALID(fs, curr) &&
+        FDATABLOCK_IS_VALID(fs, prev) &&
         !FDATABLOCK_IS_FREE(curr) &&
         !FDATABLOCK_IS_FREE(prev)));
 
@@ -620,12 +620,12 @@ static bool search_son_in_dir(struct imfs *ssd, struct fnode *dir,
  * the file/directory itself (it already exist).
  * Let's use a flag "parent" that will stop the traversal to the parent
  */
-static char *pathname_lookup(struct imfs *ssd, const char *pathname,
+static char *pathname_lookup(struct imfs *fs, const char *pathname,
                 bool parent, size_t *fnodeID, size_t *last_len)
 {
-    assert(ssd && pathname && fnodeID && last_len &&
-        !FNODE_IS_FREE(ssd, &ssd->fn[ROOT_DIR_FNODEID]) &&
-        ssd->fn[ROOT_DIR_FNODEID].type == SS_DIR);
+    assert(fs && pathname && fnodeID && last_len &&
+        !FNODE_IS_FREE(fs, &fs->fn[ROOT_DIR_FNODEID]) &&
+        fs->fn[ROOT_DIR_FNODEID].type == SS_DIR);
 
     if (*pathname != '/') return NULL;
 
@@ -659,11 +659,11 @@ static char *pathname_lookup(struct imfs *ssd, const char *pathname,
             }
             else
             {
-                assert(fnID < ssd->fn_len &&
-                !FNODE_IS_FREE(ssd, &ssd->fn[fnID]) &&
-                ssd->fn[fnID].type == SS_DIR);
+                assert(fnID < fs->fn_len &&
+                !FNODE_IS_FREE(fs, &fs->fn[fnID]) &&
+                fs->fn[fnID].type == SS_DIR);
 
-                if (!search_son_in_dir(ssd, &ssd->fn[fnID],
+                if (!search_son_in_dir(fs, &fs->fn[fnID],
                 last_head, p - last_head, &fnID))
                 {
                     last_head = NULL;
@@ -671,8 +671,8 @@ static char *pathname_lookup(struct imfs *ssd, const char *pathname,
                 }
                 else
                 {
-                    assert(fnID < ssd->fn_len &&
-                        !FNODE_IS_FREE(ssd, &ssd->fn[fnID]));
+                    assert(fnID < fs->fn_len &&
+                        !FNODE_IS_FREE(fs, &fs->fn[fnID]));
                     last_head = p = p + 1;
                     break;
                 }
@@ -683,18 +683,18 @@ static char *pathname_lookup(struct imfs *ssd, const char *pathname,
             // End of element reached correctly.
             // We need to search for the element name in
             // the fnID fnode and retreive it's fnodeID.
-            assert(fnID < ssd->fn_len &&
-                !FNODE_IS_FREE(ssd, &ssd->fn[fnID]) &&
-                ssd->fn[fnID].type == SS_DIR);
+            assert(fnID < fs->fn_len &&
+                !FNODE_IS_FREE(fs, &fs->fn[fnID]) &&
+                fs->fn[fnID].type == SS_DIR);
             // Let's search
-            bool f = search_son_in_dir(ssd, &ssd->fn[fnID],
+            bool f = search_son_in_dir(fs, &fs->fn[fnID],
                 last_head, p - last_head, &fnID);
-            assert(fnID < ssd->fn_len &&
-                !FNODE_IS_FREE(ssd, &ssd->fn[fnID]));
+            assert(fnID < fs->fn_len &&
+                !FNODE_IS_FREE(fs, &fs->fn[fnID]));
             // This search can fail both because there is
             // no element with such name or because it's a
             // file and not a dir
-            if (!f || ssd->fn[fnID].type != SS_DIR)
+            if (!f || fs->fn[fnID].type != SS_DIR)
             {
                 last_head = NULL;
                 break;
@@ -708,32 +708,32 @@ static char *pathname_lookup(struct imfs *ssd, const char *pathname,
     return last_head;
 }
 
-int imfs_mkdir(struct imfs *ssd, const char *pathname)
+int imfs_mkdir(struct imfs *fs, const char *pathname)
 {
-    if (!ssd || !pathname) return -1;
+    if (!fs || !pathname) return -1;
     
     size_t parentID;
     size_t last_len;
-    char *last = pathname_lookup(ssd, pathname,
+    char *last = pathname_lookup(fs, pathname,
                     true, &parentID, &last_len);
     if (!last) return -1;
     
     assert(last_len <= IMFS_MAX_NAME_LEN
-            && parentID < ssd->fn_len &&
-            !FNODE_IS_FREE(ssd, &ssd->fn[parentID]) &&
-            ssd->fn[parentID].type == SS_DIR);
+            && parentID < fs->fn_len &&
+            !FNODE_IS_FREE(fs, &fs->fn[parentID]) &&
+            fs->fn[parentID].type == SS_DIR);
     
     // Before actually create newdir we need to check
     // if it is already present a file or another dir
     // with the same name
     size_t newdirID;
-    if (search_son_in_dir(ssd, &ssd->fn[parentID],
+    if (search_son_in_dir(fs, &fs->fn[parentID],
         last, last_len, &newdirID)) return -1;
     
-    struct fnode *newdir = alloc_fnode(ssd);
+    struct fnode *newdir = alloc_fnode(fs);
     if (!newdir) return -1;
-    newdirID = get_fnodeID(ssd, newdir);
-    init_fnode_as_dir(ssd, newdir, parentID);
+    newdirID = get_fnodeID(fs, newdir);
+    init_fnode_as_dir(fs, newdir, parentID);
 
     struct direlem de = {
         .fnodeID = newdirID,
@@ -741,45 +741,45 @@ int imfs_mkdir(struct imfs *ssd, const char *pathname)
     };
     strncpy(de.name, last, IMFS_MAX_NAME_LEN);
 
-    if (append_bytes_to_fnode(ssd, &ssd->fn[parentID],
+    if (append_bytes_to_fnode(fs, &fs->fn[parentID],
         &de, sizeof(de), _Alignof(de))
         != (ssize_t)sizeof(de)) return -1;
     
     return 0;
 }
 
-int imfs_open(struct imfs *ssd, const char *pathname, int flags)
+int imfs_open(struct imfs *fs, const char *pathname, int flags)
 {
-    if (!ssd || !pathname) return -1;
+    if (!fs || !pathname) return -1;
 
     size_t fID;
     size_t len;
     bool create = flags & IMFS_CREAT;
-    char *last = pathname_lookup(ssd ,pathname, create,
+    char *last = pathname_lookup(fs ,pathname, create,
                     &fID, &len);
     if (!last) return -1;
 
-    assert(len <= IMFS_MAX_NAME_LEN && fID < ssd->fn_len &&
-            !FNODE_IS_FREE(ssd, &ssd->fn[fID]));
+    assert(len <= IMFS_MAX_NAME_LEN && fID < fs->fn_len &&
+            !FNODE_IS_FREE(fs, &fs->fn[fID]));
     
-    if (create && !search_son_in_dir(ssd, &ssd->fn[fID],
+    if (create && !search_son_in_dir(fs, &fs->fn[fID],
         last, len, &fID))
     {
         // If create is true we have the fnodeID of
         // the parent directory
-        assert(ssd->fn[fID].type == SS_DIR);
+        assert(fs->fn[fID].type == SS_DIR);
         
-        struct fnode *newfilenode = alloc_fnode(ssd);
+        struct fnode *newfilenode = alloc_fnode(fs);
         if (!newfilenode) return -1;
         newfilenode->type = SS_FILE;
 
         struct direlem newfile = {
-            .fnodeID = get_fnodeID(ssd, newfilenode),
+            .fnodeID = get_fnodeID(fs, newfilenode),
             .name_len = len
         };
         strncpy(newfile.name, last, IMFS_MAX_NAME_LEN);
 
-        if(append_bytes_to_fnode(ssd, &ssd->fn[fID], &newfile,
+        if(append_bytes_to_fnode(fs, &fs->fn[fID], &newfile,
             sizeof(newfile), _Alignof(newfile))
             != (ssize_t)sizeof(newfile)) return -1;
         
@@ -787,9 +787,9 @@ int imfs_open(struct imfs *ssd, const char *pathname, int flags)
     }
 
     // fID contains the ID of the file
-    assert(ssd->fn[fID].type == SS_FILE);
+    assert(fs->fn[fID].type == SS_FILE);
 
-    struct ssfile *ssf = alloc_ssfile(ssd);
+    struct ssfile *ssf = alloc_ssfile(fs);
     if (!ssf) return -1;
     
     if (!(flags & IMFS_APPEND))
@@ -798,8 +798,8 @@ int imfs_open(struct imfs *ssd, const char *pathname, int flags)
         // NOTE: Consider optimizing with one function that
         // frees all the block of the file apart from the first
         struct fdatablock *p;
-        while ((p = pop_fdatablock_from_fnode(ssd, &ssd->fn[fID])))
-            free_fdatablock(ssd, p);
+        while ((p = pop_fdatablock_from_fnode(fs, &fs->fn[fID])))
+            free_fdatablock(fs, p);
     }
     
     ssf->fnodeID = fID;
@@ -808,39 +808,39 @@ int imfs_open(struct imfs *ssd, const char *pathname, int flags)
     ssf->read_ptr.b_index = 0;
     ssf->readonly = !(flags & IMFS_RDWR);
 
-    return get_ssfileID(ssd, ssf) + 1;
+    return get_ssfileID(fs, ssf) + 1;
 }
 
-int imfs_close(struct imfs *ssd, int fd)
+int imfs_close(struct imfs *fs, int fd)
 {
-    fd--;
-    if(!ssd || fd < 0 ||
-        (size_t)fd >= ssd->ssf_len ||
-        SSFILE_IS_FREE(ssd, &ssd->ssf[fd]))
+    fd -= 1U;
+    if(!fs || fd < 0 ||
+        (size_t)fd >= fs->ssf_len ||
+        SSFILE_IS_FREE(fs, &fs->ssf[fd]))
         return -1;
 
-    free_ssfile(ssd, &ssd->ssf[fd]);
+    free_ssfile(fs, &fs->ssf[fd]);
 
     return 0;
 }
 
-ssize_t imfs_read(struct imfs *ssd, int fd, void *buf, size_t count)
+ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count)
 {
-    fd--;
-    if(!ssd || fd < 0 ||
-        (size_t)fd >= ssd->ssf_len ||
-        SSFILE_IS_FREE(ssd, &ssd->ssf[fd]))
+    fd -= 1U;
+    if(!fs || fd < 0 ||
+        (size_t)fd >= fs->ssf_len ||
+        SSFILE_IS_FREE(fs, &fs->ssf[fd]))
         return -1;
     
-    size_t fID = ssd->ssf[fd].fnodeID;
+    size_t fID = fs->ssf[fd].fnodeID;
 
-    assert(fID < ssd->fn_len);
+    assert(fID < fs->fn_len);
 
     // Maybe someone deleted the file after we opened it
-    if (FNODE_IS_FREE(ssd, &ssd->fn[fID]))
+    if (FNODE_IS_FREE(fs, &fs->fn[fID]))
         return -1;
     
-    assert(ssd->fn[fID].type == SS_FILE);
+    assert(fs->fn[fID].type == SS_FILE);
 
     size_t tot_read = 0;
     char *cbuf = (char *)buf;
@@ -850,28 +850,28 @@ ssize_t imfs_read(struct imfs *ssd, int fd, void *buf, size_t count)
     // 1) Open a new empty file or Open one without SS_APPEND
     // 2) Write some bytes to it
     // 3) Read some bytes from it
-    if (!ssd->ssf[fd].read_ptr.curr)
+    if (!fs->ssf[fd].read_ptr.curr)
     {
-        ssd->ssf[fd].read_ptr.curr = ssd->fn[fID].data_blocks_head;
-        ssd->ssf[fd].read_ptr.prev = ssd->fn[fID].data_blocks_tail;
+        fs->ssf[fd].read_ptr.curr = fs->fn[fID].data_blocks_head;
+        fs->ssf[fd].read_ptr.prev = fs->fn[fID].data_blocks_tail;
     }
     // Update the prev pointer to the new tail when curr still points
     // to the head but previous writes had created a new tail.
-    if (ssd->ssf[fd].read_ptr.curr == ssd->fn[fID].data_blocks_head &&
-        ssd->ssf[fd].read_ptr.prev != ssd->fn[fID].data_blocks_tail)
+    if (fs->ssf[fd].read_ptr.curr == fs->fn[fID].data_blocks_head &&
+        fs->ssf[fd].read_ptr.prev != fs->fn[fID].data_blocks_tail)
     {
-        ssd->ssf[fd].read_ptr.prev = ssd->fn[fID].data_blocks_tail;
+        fs->ssf[fd].read_ptr.prev = fs->fn[fID].data_blocks_tail;
     }
     
     
-    struct fdatablock *r_curr = ssd->ssf[fd].read_ptr.curr;
-    struct fdatablock *r_prev = ssd->ssf[fd].read_ptr.prev;
+    struct fdatablock *r_curr = fs->ssf[fd].read_ptr.curr;
+    struct fdatablock *r_prev = fs->ssf[fd].read_ptr.prev;
     struct fdatablock *r_next = NULL;
-    size_t r_b_index = ssd->ssf[fd].read_ptr.b_index;
+    size_t r_b_index = fs->ssf[fd].read_ptr.b_index;
 
     assert((!r_curr && !r_prev) ||
-        (FDATABLOCK_IS_VALID(ssd, r_curr) &&
-        FDATABLOCK_IS_VALID(ssd, r_prev) &&
+        (FDATABLOCK_IS_VALID(fs, r_curr) &&
+        FDATABLOCK_IS_VALID(fs, r_prev) &&
         !FDATABLOCK_IS_FREE(r_curr) &&
         !FDATABLOCK_IS_FREE(r_prev)));
 
@@ -881,15 +881,15 @@ ssize_t imfs_read(struct imfs *ssd, int fd, void *buf, size_t count)
     size_t to_read;
     size_t r_len;
 
-    while (r_next != ssd->fn[fID].data_blocks_head)
+    while (r_next != fs->fn[fID].data_blocks_head)
     {
         r_next = (struct fdatablock *)
             (r_curr->h.xor ^ (uintptr_t)r_prev);
-        assert(FDATABLOCK_IS_VALID(ssd, r_next) &&
+        assert(FDATABLOCK_IS_VALID(fs, r_next) &&
             !FDATABLOCK_IS_FREE(r_next));
         
-        last = r_next == ssd->fn[fID].data_blocks_head;
-        block_size = last * ssd->fn[fID].last_block_used +
+        last = r_next == fs->fn[fID].data_blocks_head;
+        block_size = last * fs->fn[fID].last_block_used +
             (1 - last) * IMFS_DATA_BLOCK_SIZE;
         
         assert(r_b_index <= block_size);
@@ -912,47 +912,47 @@ ssize_t imfs_read(struct imfs *ssd, int fd, void *buf, size_t count)
     }
     
     // Update the read pointer
-    ssd->ssf[fd].read_ptr.curr = r_curr;
-    ssd->ssf[fd].read_ptr.prev = r_prev;
-    ssd->ssf[fd].read_ptr.b_index = r_b_index;
+    fs->ssf[fd].read_ptr.curr = r_curr;
+    fs->ssf[fd].read_ptr.prev = r_prev;
+    fs->ssf[fd].read_ptr.b_index = r_b_index;
 
     return tot_read;
 }
 
-ssize_t imfs_write(struct imfs *ssd, int fd, const void *buf, size_t count)
+ssize_t imfs_write(struct imfs *fs, int fd, const void *buf, size_t count)
 {
-    fd--;
-    if(!ssd || !buf || fd < 0 || (size_t)fd >= ssd->ssf_len ||
-        SSFILE_IS_FREE(ssd, &ssd->ssf[fd]) ||
-        ssd->ssf[fd].readonly)
+    fd -= 1U;
+    if(!fs || !buf || fd < 0 || (size_t)fd >= fs->ssf_len ||
+        SSFILE_IS_FREE(fs, &fs->ssf[fd]) ||
+        fs->ssf[fd].readonly)
         return -1;
     
-    size_t fID = ssd->ssf[fd].fnodeID;
+    size_t fID = fs->ssf[fd].fnodeID;
 
-    assert(fID < ssd->fn_len);
+    assert(fID < fs->fn_len);
 
     // Maybe someone deleted the file after we opened it
-    if (FNODE_IS_FREE(ssd, &ssd->fn[fID]))
+    if (FNODE_IS_FREE(fs, &fs->fn[fID]))
         return -1;
     
-    assert(ssd->fn[fID].type == SS_FILE);
+    assert(fs->fn[fID].type == SS_FILE);
 
-    return append_bytes_to_fnode(ssd, &ssd->fn[fID], buf, count, 1);
+    return append_bytes_to_fnode(fs, &fs->fn[fID], buf, count, 1);
 }
 
 struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format)
 {
-    struct imfs *ssd = (struct imfs *)
+    struct imfs *fs = (struct imfs *)
         ALIGN_ADDR_POW2(base + SS_MAGIC_SIZE,
             _Alignof(struct imfs));
 
     if (!format && !memcmp(base, ss_magic, SS_MAGIC_SIZE))
-        return ssd;
+        return fs;
     
     if(!conf || conf->max_opened_files >= INT_MAX) return NULL;
 
     struct ssfile *ssfiles = (struct ssfile *)
-        ALIGN_ADDR_POW2(ssd + 1, _Alignof(struct ssfile));
+        ALIGN_ADDR_POW2(fs + 1, _Alignof(struct ssfile));
 
     struct fnode *fnodes = (struct fnode *)
         ALIGN_ADDR_POW2(ssfiles + conf->max_opened_files,
@@ -962,58 +962,58 @@ struct imfs *imfs_init(char *base, struct imfs_conf *conf, bool format)
         ALIGN_ADDR_POW2(fnodes + conf->max_num_fnodes + 1,
             _Alignof(struct fdatablock));
 
-    // Invalid secure storage descriptor is returned if
+    // Invalid fs descriptor is returned if
     // we have no space for at least one fdatablock
     if (((uintptr_t)base + conf->mem_size) <=
         (uintptr_t)(fdatablocks+1)) return NULL;
     
     memcpy(base, ss_magic, SS_MAGIC_SIZE);
-    ssd->mem_size = conf->mem_size;
-    ssd->ssf = ssfiles;
-    ssd->ssf_len = conf->max_opened_files;
-    ssd->fn = fnodes;
-    ssd->fn_len = conf->max_num_fnodes + 1;
-    ssd->fb = fdatablocks;
-    ssd->fb_len = ((uintptr_t)base +
+    fs->mem_size = conf->mem_size;
+    fs->ssf = ssfiles;
+    fs->ssf_len = conf->max_opened_files;
+    fs->fn = fnodes;
+    fs->fn_len = conf->max_num_fnodes + 1;
+    fs->fb = fdatablocks;
+    fs->fb_len = ((uintptr_t)base +
                     conf->mem_size -
                     (uintptr_t)fdatablocks) /
                     sizeof(struct fdatablock);
 
     // Initialize the ssfile circular freelist
-    for (size_t i = 0; i < ssd->ssf_len-1; i++)
-        ssd->ssf[i].next = &ssd->ssf[i+1];
+    for (size_t i = 0; i < fs->ssf_len-1; i++)
+        fs->ssf[i].next = &fs->ssf[i+1];
     
-    ssd->ssf[ssd->ssf_len-1].next = &ssd->ssf[0];
-    ssd->ssf_cfl_tail = &ssd->ssf[ssd->ssf_len-1];
+    fs->ssf[fs->ssf_len-1].next = &fs->ssf[0];
+    fs->ssf_cfl_tail = &fs->ssf[fs->ssf_len-1];
 
     // Initialize the fnode circular freelist
-    for (size_t i = 0; i < ssd->fn_len-1; i++)
-        ssd->fn[i].next = &ssd->fn[i+1];
+    for (size_t i = 0; i < fs->fn_len-1; i++)
+        fs->fn[i].next = &fs->fn[i+1];
     
-    ssd->fn[ssd->fn_len-1].next = &ssd->fn[0];
-    ssd->fn_cfl_tail = &ssd->fn[ssd->fn_len-1];
+    fs->fn[fs->fn_len-1].next = &fs->fn[0];
+    fs->fn_cfl_tail = &fs->fn[fs->fn_len-1];
 
     // Initialize the fdatablocks freelist
-    for (size_t i = 0; i < ssd->fb_len-1; i++)
-        ssd->fb[i].h.next = (struct fdatablock *)
-                ((uintptr_t)&ssd->fb[i+1] | (uintptr_t)1);
+    for (size_t i = 0; i < fs->fb_len-1; i++)
+        fs->fb[i].h.next = (struct fdatablock *)
+                ((uintptr_t)&fs->fb[i+1] | (uintptr_t)1);
     
-    ssd->fb[ssd->fb_len-1].h.next = (struct fdatablock *)
+    fs->fb[fs->fb_len-1].h.next = (struct fdatablock *)
                 ((uintptr_t)NULL | (uintptr_t)1);
-    ssd->fb_fl_head = &ssd->fb[0];
+    fs->fb_fl_head = &fs->fb[0];
 
-    assert(_Alignof(ssd->ssf) == _Alignof(struct ssfile));
-    assert(_Alignof(ssd->ssf_cfl_tail) == _Alignof(struct ssfile));
-    assert(_Alignof(ssd->fn) == _Alignof(struct fnode));
-    assert(_Alignof(ssd->fn_cfl_tail) == _Alignof(struct fnode));
-    assert(_Alignof(ssd->fb) == _Alignof(struct fdatablock));
-    assert(_Alignof(ssd->fb_fl_head) == _Alignof(struct fdatablock));
+    assert(_Alignof(fs->ssf) == _Alignof(struct ssfile));
+    assert(_Alignof(fs->ssf_cfl_tail) == _Alignof(struct ssfile));
+    assert(_Alignof(fs->fn) == _Alignof(struct fnode));
+    assert(_Alignof(fs->fn_cfl_tail) == _Alignof(struct fnode));
+    assert(_Alignof(fs->fb) == _Alignof(struct fdatablock));
+    assert(_Alignof(fs->fb_fl_head) == _Alignof(struct fdatablock));
 
     // Init the root directory
-    struct fnode *root = alloc_fnode(ssd);
+    struct fnode *root = alloc_fnode(fs);
     if (!root) return NULL;
-    assert (get_fnodeID(ssd, root) == ROOT_DIR_FNODEID);
-    init_fnode_as_dir(ssd, root, ROOT_DIR_FNODEID);
+    assert (get_fnodeID(fs, root) == ROOT_DIR_FNODEID);
+    init_fnode_as_dir(fs, root, ROOT_DIR_FNODEID);
 
-    return ssd;
+    return fs;
 }
