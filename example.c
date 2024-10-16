@@ -12,12 +12,11 @@ char rbuf[BSIZE];
 int main(void)
 {
     struct imfs_conf c = {
-        .mem_size = MSIZE,
         .max_num_fnodes = 5,
         .max_opened_files = 5
     };
 
-    struct imfs *fs = imfs_init(base_mem, &c, true);
+    struct imfs *fs = imfs_init(base_mem, MSIZE, &c, true);
 
     if (!fs)
     {
