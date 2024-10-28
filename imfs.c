@@ -860,7 +860,7 @@ int imfs_rmdir(struct imfs *fs, const char *pathname)
     struct direlem *s = (struct direlem *)
         &fs->fn[pID].data_blocks_tail->data[idx];
     
-    memmove(d, s, sd);
+    if (d != s) memcpy(d, s, sd);
     fs->fn[pID].last_block_used -= sd;
     
     if (fs->fn[pID].last_block_used == 0)
@@ -1247,7 +1247,7 @@ int imfs_unlink(struct imfs *fs, const char *pathname)
     struct direlem *s = (struct direlem *)
         &fs->fn[pID].data_blocks_tail->data[idx];
     
-    memmove(d, s, sd);
+    if (d != s) memcpy(d, s, sd);
     fs->fn[pID].last_block_used -= sd;
     
     if (fs->fn[pID].last_block_used == 0)
