@@ -6,7 +6,7 @@ This project marks my first venture into the world of file systems and was inspi
 The goal was to provide a way to store data permanently on addressable non-volatile memories (such as flash), while remaining light enough to be used in resource-constrained embedded environments.
 
 ## Specs
-- No support for file deletion (yet),
+- Supports hard links,
 - Lacks complex file operations like renaming or moving the file r/w pointer,
 - No support for multi-threaded usage. User code must handle serialization when accessing the file system,
 - Not atomic with respect to failures during operations.

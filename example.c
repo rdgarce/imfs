@@ -6,67 +6,154 @@
 #define BSIZE 1024
 
 char base_mem[MSIZE];
-char wbuf[BSIZE];
-char rbuf[BSIZE];
+char buf[BSIZE];
 
 int main(void)
 {
     struct imfs_conf c = {
-        .max_num_fnodes = 5,
-        .max_opened_files = 5
+        .max_num_fnodes = 50,
+        .max_opened_files = 50
     };
 
     struct imfs *fs = imfs_init(base_mem, MSIZE, &c, true);
 
     if (!fs)
     {
-        fputs("Error in IMFS init!\n", stdout);
+        fputs("IMFS: Error in IMFS init!\n", stdout);
         return -1;
     }
     
-    fputs("# IMFS: Filesystem started\n", stdout);
+    fputs("IMFS: Filesystem started\n", stdout);
 
-    if (imfs_mkdir(fs, "/folder1"))
+    bool cont = true;
+    int fd;
+    size_t size;
+    ssize_t result;
+    do
     {
-        fputs("Error in mkdir!\n", stdout);
-        return -1;
-    }
+        fputs("\nSelect an option:\n"
+            "1: Create a directory\n"
+            "2: Remove a directory\n"
+            "3: Open/Create a file\n"
+            "4: Close a file\n"
+            "5: Read from a file\n"
+            "6: Write to a file\n"
+            "7: Create an hard link\n"
+            "8: Delete an hard link\n"
+            "Other: Exit\n"
+            "# ", stdout);
+        
+        fgets(buf, sizeof(buf), stdin);
 
-    int fd1 = imfs_open(fs, "/folder1/../folder1/./file1", IMFS_CREAT | IMFS_RDWR);
+        switch (buf[0])
+        {
+        case '1':
+            fputs("Path of the directory:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
 
-    fputs("# IMFS: File created\n", stdout);
+            printf("STATUS: %s\n", imfs_mkdir(fs, buf) ? "ERROR" : "OK");
+            break;
+        
+        case '2':
+            fputs("Path of the directory:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
 
-    fputs("Write something in the file: ", stdout);
+            printf("STATUS: %s\n", imfs_rmdir(fs, buf) ? "ERROR" : "OK");
+            break;
 
-    if (!fgets(wbuf, BSIZE, stdin))
-    {
-        fputs("Error in fgets!\n", stdout);
-        return -1;
-    }
+        case '3':
+            fputs("Path of the file:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
 
-    size_t len = strlen(wbuf) + 1;
-    if (imfs_write(fs, fd1, wbuf, len) != (ssize_t)len)
-    {
-        fputs("Error in write!\n", stdout);
-        return -1;
-    }
+            printf("FD (< 0 IS ERROR): %d\n",
+                imfs_open(fs, buf, IMFS_CREAT | IMFS_RDWR));
+            break;
+
+        case '4':
+            fputs("File descriptor:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            sscanf(buf, "%d", &fd);
+
+            printf("STATUS: %s\n", imfs_close(fs, fd) ? "ERROR" : "OK");
+            break;
+
+        case '5':
+            fputs("File descriptor:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            sscanf(buf, "%d", &fd);
+            
+            fputs("Num. bytes to read:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            sscanf(buf, "%zu", &size);
+            size = size < sizeof(buf) ? size : sizeof(buf);
+            
+            result = imfs_read(fs, fd, buf, size);
+            printf("NUM. BYTES READ (< 0 IS ERROR): %zi\n", result);
+            if (result > 0)
+            {
+                buf[result] = '\0';
+                printf("BYTES: %s\n", buf);
+            }
+            break;
+
+        case '6':
+            fputs("File descriptor:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            sscanf(buf, "%d", &fd);
+            
+            fputs("Bytes to write:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
+
+            printf("BYTES WRITTEN (< 0 IS ERROR): %zi\n",
+                imfs_write(fs, fd, buf, strlen(buf)));
+            break;
+
+        case '7':
+            fputs("Path of the old file:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
+            size = strlen(buf) + 1;
+
+            fputs("Path of the new file:\n"
+                "# ", stdout);
+            fgets(&buf[size], sizeof(buf) - size, stdin);
+            buf[size + strcspn(&buf[size], "\n")] = '\0';
+
+            printf("STATUS: %s\n",
+                imfs_link(fs, buf, &buf[size]) ? "ERROR" : "OK");
+            break;
+
+        case '8':
+            fputs("Path of the file:\n"
+                "# ", stdout);
+            fgets(buf, sizeof(buf), stdin);
+            buf[strcspn(buf, "\n")] = '\0';
+
+            printf("STATUS: %s\n",
+                imfs_unlink(fs, buf) ? "ERROR" : "OK");
+            break;
+        
+        default:
+            cont = false;
+            break;
+        }
+
+    } while (cont);
     
-    ssize_t rlen = imfs_read(fs, fd1, rbuf, BSIZE);
-    if (rlen < 0)
-    {
-        fputs("Error in read!\n", stdout);
-        return -1;
-    }
-
-    printf("The content read from the file is: %s", rbuf);
-
-    if (imfs_close(fs, fd1))
-    {
-        fputs("Error in close!\n", stdout);
-        return -1;
-    }
-
-    fputs("# IMFS: File closed\n", stdout);
+    fputs("IMFS: Filesystem shutdowned\n", stdout);
 
     return 0;
 }

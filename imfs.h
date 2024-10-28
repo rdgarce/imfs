@@ -65,7 +65,7 @@ struct imfs_conf {
 #define IMFS_TRUNC    4
 
 /*
- * Initialize a IMFS at [base] with [conf] as configuration.
+ * Initialize a IMFS at [base] of size [size] with [conf] as configuration.
  * If [format] is false and a IMFS is already initialized at [base]
  * this function just returns the descriptor of the previous IMFS
  * (This acts as a "mount" operation).
@@ -75,7 +75,12 @@ struct imfs_conf {
 struct imfs *
 imfs_init(char *base, size_t size, struct imfs_conf *conf, bool format);
 
+int imfs_link(struct imfs *fs, const char *oldpath, const char *newpath);
+int imfs_unlink(struct imfs *fs, const char *pathname);
+
 int imfs_mkdir(struct imfs *fs, const char *pathname);
+int imfs_rmdir(struct imfs *fs, const char *pathname);
+
 int imfs_open(struct imfs *fs, const char *pathname, int flags);
 int imfs_close(struct imfs *fs, int fd);
 ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count);
