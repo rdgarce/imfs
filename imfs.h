@@ -21,7 +21,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <unistd.h>
 
 /*
  * The fixed size of a data block allocated to a file.
@@ -83,7 +82,7 @@ int imfs_rmdir(struct imfs *fs, const char *pathname);
 
 int imfs_open(struct imfs *fs, const char *pathname, int flags);
 int imfs_close(struct imfs *fs, int fd);
-ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count);
-ssize_t imfs_write(struct imfs *fs, int fd, const void *buf, size_t count);
+long imfs_read(struct imfs *fs, int fd, void *buf, size_t count);
+long imfs_write(struct imfs *fs, int fd, const void *buf, size_t count);
 
 #endif

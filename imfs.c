@@ -367,10 +367,10 @@ static struct fdatablock *pop_fdatablock_from_fnode(struct imfs *fs,
     return block;
 }
 
-static ssize_t append_bytes_to_fnode(struct imfs *fs, struct fnode *f,
+static long append_bytes_to_fnode(struct imfs *fs, struct fnode *f,
                 const void *buf, size_t len, size_t alignment)
 {
-    assert(fs && buf && len <= SSIZE_MAX &&
+    assert(fs && buf && len <= LONG_MAX &&
             alignment < IMFS_DATA_BLOCK_SIZE &&
             (alignment & (alignment - 1UL)) == 0 &&
             FNODE_IS_VALID(fs, f) && !FNODE_IS_FREE(fs, f));
@@ -427,7 +427,7 @@ static ssize_t append_bytes_to_fnode(struct imfs *fs, struct fnode *f,
         f->last_block_used += w_len;
     }
 
-    return (ssize_t)tot_written;
+    return (long)tot_written;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -530,7 +530,7 @@ static int init_fnode_as_dir(struct imfs *fs, struct fnode *f,
 
     if (append_bytes_to_fnode(fs, f, init_dirs,
         sizeof(init_dirs), _Alignof(init_dirs))
-        != (ssize_t)sizeof(init_dirs)) return -1;
+        != (long)sizeof(init_dirs)) return -1;
 
     return 0;
 }
@@ -779,7 +779,7 @@ int imfs_mkdir(struct imfs *fs, const char *pathname)
 
     if (append_bytes_to_fnode(fs, &fs->fn[parentID],
         &de, sizeof(de), _Alignof(de))
-        != (ssize_t)sizeof(de)) return -1;
+        != (long)sizeof(de)) return -1;
     
     return 0;
 }
@@ -912,7 +912,7 @@ int imfs_open(struct imfs *fs, const char *pathname, int flags)
 
         if(append_bytes_to_fnode(fs, &fs->fn[fID], &newfile,
             sizeof(newfile), _Alignof(newfile))
-            != (ssize_t)sizeof(newfile)) return -1;
+            != (long)sizeof(newfile)) return -1;
         
         fID = newfile.fnodeID;
         // Increment the link count
@@ -974,7 +974,7 @@ int imfs_close(struct imfs *fs, int fd)
     return 0;
 }
 
-ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count)
+long imfs_read(struct imfs *fs, int fd, void *buf, size_t count)
 {
     fd -= 1U;
     if(!fs || !buf || fd < 0 ||
@@ -1069,7 +1069,7 @@ ssize_t imfs_read(struct imfs *fs, int fd, void *buf, size_t count)
     return tot_read;
 }
 
-ssize_t imfs_write(struct imfs *fs, int fd, const void *buf, size_t count)
+long imfs_write(struct imfs *fs, int fd, const void *buf, size_t count)
 {
     fd -= 1U;
     if(!fs || !buf || fd < 0 ||
@@ -1202,7 +1202,7 @@ int imfs_link(struct imfs *fs, const char *oldpath, const char *newpath)
 
     if(append_bytes_to_fnode(fs, &fs->fn[newfID], &newfile,
         sizeof(newfile), _Alignof(newfile))
-        != (ssize_t)sizeof(newfile)) return -1;
+        != (long)sizeof(newfile)) return -1;
 
     // Increment the link count
     fs->fn[oldfID].link_count++;

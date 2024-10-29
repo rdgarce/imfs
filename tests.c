@@ -20,7 +20,7 @@ void queue_init(ByteQueue *queue, char *buffer, size_t capacity) {
     queue->write_pos = 0;
 }
 
-ssize_t queue_write(ByteQueue *queue, const char *data, size_t len) {
+long queue_write(ByteQueue *queue, const char *data, size_t len) {
     if (len > queue->capacity - queue->size) {
         return -1;
     }
@@ -37,7 +37,7 @@ ssize_t queue_write(ByteQueue *queue, const char *data, size_t len) {
     return len;
 }
 
-ssize_t queue_read(ByteQueue *queue, char *buffer, size_t len) {
+long queue_read(ByteQueue *queue, char *buffer, size_t len) {
     if (queue->size == 0) {
         return 0;
     }
@@ -144,8 +144,8 @@ static bool test_big_read_write(void)
     char *random_str = random_path(MAX_DEPTH);
     size_t len = strlen(random_str);
 
-    ssize_t ss_res = imfs_read(ssd, fd, read_bufs[0], MSIZE);
-    ssize_t bq_res = queue_read(&bq, read_bufs[1], MSIZE);
+    long ss_res = imfs_read(ssd, fd, read_bufs[0], MSIZE);
+    long bq_res = queue_read(&bq, read_bufs[1], MSIZE);
     if (ss_res != bq_res) return false;
 
     ss_res = imfs_write(ssd, fd, random_str, len);
@@ -185,8 +185,8 @@ static bool test_one_M_random_read_write(void)
         {
             // Read
             size_t r_size = rand() % MSIZE;
-            ssize_t ss_res = imfs_read(ssd, fd, read_bufs[0], r_size);
-            ssize_t bq_res = queue_read(&bq, read_bufs[1], r_size);
+            long ss_res = imfs_read(ssd, fd, read_bufs[0], r_size);
+            long bq_res = queue_read(&bq, read_bufs[1], r_size);
             if ((ss_res != bq_res) ||
                 (ss_res >= 0 &&
                 memcmp(read_bufs[0], read_bufs[1], ss_res)))
@@ -200,8 +200,8 @@ static bool test_one_M_random_read_write(void)
             // Write
             char *random = random_path(MAX_DEPTH);
             size_t len = strlen(random) % 1024;
-            ssize_t ss_res = imfs_write(ssd, fd, random, len);
-            ssize_t bq_res = queue_write(&bq, random, len);
+            long ss_res = imfs_write(ssd, fd, random, len);
+            long bq_res = queue_write(&bq, random, len);
             if (ss_res != bq_res)
             {
                 printf("++ Write failed with ret val %ld instead of %ld. Write len was %ld\n", ss_res, bq_res, len);
@@ -242,7 +242,7 @@ static bool test_file_openings(void)
         return false;
     }
     
-    for (ssize_t i = NUMOPFLS-1; i >= 0; i--)
+    for (long i = NUMOPFLS-1; i >= 0; i--)
         if (imfs_close(ssd, fds[i]) != 0)
         {
             printf("++ Unexpected error while closing file descriptors\n");
@@ -316,7 +316,7 @@ static bool test_common_usage(void)
     static char comp_path[MAX_PATH_LENGTH+1+FNAME_MAX_LEN+1];
     static char paths[NUMDIR][MAX_PATH_LENGTH];
     static char fnames[NUMDIR][FNAME_MAX_LEN+1];
-    static ssize_t w_r_sizes[NUMDIR];
+    static long w_r_sizes[NUMDIR];
     static char random_bytes[RBLEN];
     static char read_buffer[RBLEN];
     strncpy(random_bytes, random_path(MAX_DEPTH), RBLEN);
@@ -358,7 +358,7 @@ static bool test_common_usage(void)
             return false;
         }
         
-        ssize_t res;
+        long res;
         if ((res = imfs_write(ssd, fd, random_bytes, w_r_sizes[i])) != 
             w_r_sizes[i])
         {
@@ -402,7 +402,7 @@ static bool test_common_usage(void)
             return false;
         }
         
-        ssize_t res;
+        long res;
         if ((res = imfs_read(ssd2, fd, read_buffer, RBLEN)) != w_r_sizes[i] ||
             memcmp(read_buffer, random_bytes, res))
         {

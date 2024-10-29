@@ -28,7 +28,7 @@ int main(void)
     bool cont = true;
     int fd;
     size_t size;
-    ssize_t result;
+    long result;
     do
     {
         fputs("\nSelect an option:\n"
