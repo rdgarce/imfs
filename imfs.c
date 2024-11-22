@@ -63,7 +63,7 @@ struct direlem {
 
 
 struct fdatablock {
-    union fdbhead{
+    union fdbhead {
         /* next is used while in freelist for easy management */
         struct fdatablock *next;
         /* xor is used while allocated to a fnode as next ^ prev */
@@ -489,10 +489,10 @@ static void free_file(struct imfs *fs, struct file *files)
     }
 }
 
-static unsigned int get_fileID(struct imfs *fs, struct file *files)
+static unsigned int get_fileID(struct imfs *fs, struct file *file)
 {
-    assert(fs && FILE_IS_VALID(fs, files));
-    return (unsigned int)(files - fs->files);
+    assert(fs && FILE_IS_VALID(fs, file));
+    return (unsigned int)(file - fs->files);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -514,19 +514,16 @@ static int init_fnode_as_dir(struct imfs *fs, struct fnode *f,
 
     struct direlem init_dirs[] = {
         {
-        .fnodeID = ROOT_DIR_FNODEID,
+        .fnodeID = get_fnodeID(fs, f),
         .name_len = 1,
         .name = {'.'}
         },
         {
-        .fnodeID = ROOT_DIR_FNODEID,
+        .fnodeID = parentID,
         .name_len = 2,
         .name = {'.', '.'}
         }
     };
-
-    init_dirs[0].fnodeID = get_fnodeID(fs, f);
-    init_dirs[1].fnodeID = parentID;
 
     if (append_bytes_to_fnode(fs, f, init_dirs,
         sizeof(init_dirs), _Alignof(init_dirs))
