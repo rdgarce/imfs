@@ -887,31 +887,34 @@ int imfs_open(struct imfs *fs, const char *pathname, int flags)
     assert(len <= IMFS_MAX_NAME_LEN && fID < fs->fn_len &&
             !FNODE_IS_FREE(fs, &fs->fn[fID]));
 
-    struct direlem *d = search_son_in_dir(fs, &fs->fn[fID],
-        last, len);
-    if (d) fID = d->fnodeID;
-
-    if (create && !d)
+    if (create)
     {
         // If create is true we have the fnodeID of
         // the parent directory
         assert(fs->fn[fID].type == IMFS_DIR);
-        
-        struct fnode *newfilenode = alloc_fnode(fs);
-        if (!newfilenode) return -1;
-        newfilenode->type = IMFS_FILE;
 
-        struct direlem newfile = {
-            .fnodeID = get_fnodeID(fs, newfilenode),
-            .name_len = len
-        };
-        strncpy(newfile.name, last, IMFS_MAX_NAME_LEN);
+        // Check if file already exists
+        struct direlem *d = search_son_in_dir(fs, &fs->fn[fID],
+            last, len);
+        if (d) fID = d->fnodeID;
+        else
+        {
+            struct fnode *newfilenode = alloc_fnode(fs);
+            if (!newfilenode) return -1;
+            newfilenode->type = IMFS_FILE;
 
-        if(append_bytes_to_fnode(fs, &fs->fn[fID], &newfile,
-            sizeof(newfile), _Alignof(newfile))
-            != (long)sizeof(newfile)) return -1;
-        
-        fID = newfile.fnodeID;
+            struct direlem newfile = {
+                .fnodeID = get_fnodeID(fs, newfilenode),
+                .name_len = len
+            };
+            strncpy(newfile.name, last, IMFS_MAX_NAME_LEN);
+
+            if(append_bytes_to_fnode(fs, &fs->fn[fID], &newfile,
+                sizeof(newfile), _Alignof(newfile))
+                != (long)sizeof(newfile)) return -1;
+            
+            fID = newfile.fnodeID;
+        }
         // Increment the link count
         fs->fn[fID].link_count++;
     }
