@@ -35,7 +35,8 @@ _Static_assert(IMFS_MIN_DATA_BLOCK_SIZE_POW2 > 5,
 #define IMFS_PRE_ADJ_DATA_BLOCK_SIZE                    \
     (1UL << IMFS_MIN_DATA_BLOCK_SIZE_POW2)
 
-struct direlem {
+struct direlem
+{
     size_t fnodeID;
     unsigned char name_len;
     char name[IMFS_MAX_NAME_LEN];
@@ -58,12 +59,12 @@ struct direlem {
  * it's a multiple of the size of struct direlem.
  */
 #define IMFS_DATA_BLOCK_SIZE                            \
-    (sizeof(struct direlem) *                           \
-    DIRELEM_PER_FDB)
+    (sizeof(struct direlem) * DIRELEM_PER_FDB)
 
-
-struct fdatablock {
-    union fdbhead {
+struct fdatablock
+{
+    union fdbhead
+    {
         /* next is used while in freelist for easy management */
         struct fdatablock *next;
         /* xor is used while allocated to a fnode as next ^ prev */
@@ -79,8 +80,10 @@ struct fdatablock {
 // status so we need to impose a minimum alignment of 2
 _Static_assert(_Alignof(struct fdatablock) > 1);
 
-struct fnode {
-    union {
+struct fnode
+{
+    union
+    {
         /*
          * Points to the head of the circular xor list
          * of filedatablock allocated to this fnode
@@ -101,16 +104,20 @@ struct fnode {
     unsigned short link_count;
     /* the number of opened files referencing this fnode */
     unsigned short open_count;
-    enum {
+    enum
+    {
         IMFS_FILE,
         IMFS_DIR
     } type;
 };
 
-struct file {
+struct file
+{
     size_t fnodeID;
-    union {
-        struct fileptr {
+    union
+    {
+        struct fileptr
+        {
             struct fdatablock *curr;
             struct fdatablock *prev;
             size_t b_index;
@@ -124,7 +131,8 @@ struct file {
 /* IMFS */
 #define IMFS_MAGIC 0x494D4653
 
-struct imfs {
+struct imfs
+{
     uint32_t magic;
     /* size of the whole available memory */
     size_t mem_size;
@@ -512,7 +520,8 @@ static int init_fnode_as_dir(struct imfs *fs, struct fnode *f,
     
     f->type = IMFS_DIR;
 
-    struct direlem init_dirs[] = {
+    struct direlem init_dirs[] =
+    {
         {
         .fnodeID = get_fnodeID(fs, f),
         .name_len = 1,
@@ -768,7 +777,8 @@ int imfs_mkdir(struct imfs *fs, const char *pathname)
     newdirID = get_fnodeID(fs, newdir);
     init_fnode_as_dir(fs, newdir, parentID);
 
-    struct direlem de = {
+    struct direlem de =
+    {
         .fnodeID = newdirID,
         .name_len = last_len
     };

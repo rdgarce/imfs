@@ -14,10 +14,10 @@ tests: tests.c imfs.c
 
 cov: CFLAGS += -fprofile-arcs -ftest-coverage
 cov: tests
-	@gcov tests-ss.gcno
+	@gcov tests-imfs.gcno
 	@lcov --capture --directory . --output-file coverage.lcov
 	@genhtml coverage.lcov --output-directory cov
 	@rm -f *.gcda *.gcno *.gcov *.lcov
 
 clean:
-	rm -rf cov example tests *.o *.gcda *.gcno
+	rm -rf cov example tests *.o *.gcda *.gcno *.gcov *.lcov

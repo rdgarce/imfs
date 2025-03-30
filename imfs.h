@@ -45,7 +45,8 @@
 
 struct imfs;
 
-struct imfs_conf {
+struct imfs_conf
+{
     size_t max_num_fnodes;
     unsigned int max_opened_files;
 };
